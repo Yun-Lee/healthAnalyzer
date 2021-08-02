@@ -8,7 +8,7 @@ class demo_class:
     
     def __init__(self):
         
-        self.uri = 'privateURI'
+        self.uri = 'mongodb+srv://jubo-nis:tfyVTveUu2hISK01@jubo-mongo.iiltl.gcp.mongodb.net/release?authSource=admin&retryWrites=true&w=majority'
         self.client = MongoClient(self.uri)
         self.db = self.client.release
         
@@ -19,13 +19,13 @@ class demo_class:
         self.patient_data.columns = ['a', 'b']
         self.patient_data["name"] = self.patient_data["lastName"] + self.patient_data["firstName"]
         self.patient_data.columns = ['patient', 'lastName', 'firstName', 'organization', 'name']
-        self.patient_data.to_csv('patient.csv', encoding='utf-8')
+        self.patient_data.to_csv('jb/TableauData/patient.csv', encoding='utf-8')
         
         # organization
         collection = self.db.organizations
         self.organizations_table = pd.DataFrame(list(collection.find({}, {'name': 1,'nickName': 1, 'solution':1})))
         self.organizations_table['org_id'] = self.organizations_table['_id']
-        self.organizations_table.to_csv('organizations_table.csv', encoding='utf-8')
+        self.organizations_table.to_csv('jb/TableauData/organizations_table.csv', encoding='utf-8')
     
     
     def Get_vitalsign(self):
@@ -43,7 +43,7 @@ class demo_class:
                                                                  'RR':1,
                                                                  'SPO2':1})))
         patient_vitalsign = self.patient_data.merge(vitalsigns_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_vitalsign.to_csv('patient_vitalsign.csv', encoding='utf-8')
+        patient_vitalsign.to_csv('jb/TableauData/patient_vitalsign.csv', encoding='utf-8')
     
     
     def Get_bloodsugar(self):
@@ -61,7 +61,7 @@ class demo_class:
         
         # bloodsugar_data_2 = bloodsugar_data.explode('insulin')
         patient_bloodsugar = self.patient_data.merge(bloodsugar_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_bloodsugar.to_csv('patient_bloodsugar.csv', encoding='utf-8')
+        patient_bloodsugar.to_csv('jb/TableauData/patient_bloodsugar.csv', encoding='utf-8')
         
         
     def Get_insulin(self):
@@ -78,7 +78,7 @@ class demo_class:
                                                                'bloodsugar':1,
                                                                'state':1})))
         patient_insulin = self.patient_data.merge(insulins_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_insulin.to_csv('patient_insulin.csv', encoding='utf-8')
+        patient_insulin.to_csv('jb/TableauData/patient_insulin.csv', encoding='utf-8')
         
         
     def Get_weight(self):
@@ -99,7 +99,7 @@ class demo_class:
                                                               'monthWeight6':1})))
         
         patient_weight = self.patient_data.merge(weights_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_weight.to_csv('patient_weight.csv', encoding='utf-8')
+        patient_weight.to_csv('jb/TableauData/patient_weight.csv', encoding='utf-8')
         
         
     def Get_cognitive(self):
@@ -112,7 +112,7 @@ class demo_class:
                                                                  'score':1,
                                                                  'unassessable':1})))
         patient_cognitive = self.patient_data.merge(cognitives_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_cognitive.to_csv('patient_cognitive.csv', encoding='utf-8')
+        patient_cognitive.to_csv('jb/TableauData/patient_cognitive.csv', encoding='utf-8')
         
         
     def Get_depression(self):
@@ -125,7 +125,7 @@ class demo_class:
                                                                  'score':1,
                                                                  'unassessable':1})))
         patient_depression = self.patient_data.merge(depressions_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_depression.to_csv('patient_depression.csv', encoding='utf-8')
+        patient_depression.to_csv('jb/TableauData/patient_depression.csv', encoding='utf-8')
             
         
     def Get_fall(self):
@@ -139,7 +139,7 @@ class demo_class:
                                                             'score':1,
                                                             'type':1})))
         patient_fall = self.patient_data.merge(falls_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_fall.to_csv('patient_fall.csv', encoding='utf-8')  
+        patient_fall.to_csv('jb/TableauData/patient_fall.csv', encoding='utf-8')  
         
         
     def Get_barthel(self):
@@ -152,7 +152,7 @@ class demo_class:
                                                                'createdDate':1,
                                                                'score':1})))
         patient_barthel = self.patient_data.merge(barthels_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_barthel.to_csv('patient_barthel.csv', encoding='utf-8')
+        patient_barthel.to_csv('jb/TableauData/patient_barthel.csv', encoding='utf-8')
         
         
     def Get_iadl(self):
@@ -165,7 +165,7 @@ class demo_class:
                                                                       'createdDate':1,
                                                                       'score':1})))
         patient_iadl = self.patient_data.merge(iadlassessments_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_iadl.to_csv('patient_iadl.csv', encoding='utf-8')
+        patient_iadl.to_csv('jb/TableauData/patient_iadl.csv', encoding='utf-8')
             
         
     def Get_badl(self):
@@ -178,7 +178,7 @@ class demo_class:
                                                             'createdDate':1,
                                                             'score':1})))
         patient_badl = self.patient_data.merge(badls_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_badl.to_csv('patient_badl.csv', encoding='utf-8')
+        patient_badl.to_csv('jb/TableauData/patient_badl.csv', encoding='utf-8')
         
         
     def Get_pressure(self):
@@ -192,7 +192,7 @@ class demo_class:
                                                                 'score':1,
                                                                 'assessmentType':1})))
         patient_pressure = self.patient_data.merge(pressures_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_pressure.to_csv('patient_pressure.csv', encoding='utf-8')
+        patient_pressure.to_csv('jb/TableauData/patient_pressure.csv', encoding='utf-8')
         
         
     def Get_mmse(self):
@@ -222,7 +222,7 @@ class demo_class:
             mmses_data[col] = mmses_data[col].replace(['correct'], 1)
             
         patient_mmse = self.patient_data.merge(mmses_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_mmse.to_csv('patient_mmse.csv', encoding='utf-8')
+        patient_mmse.to_csv('jb/TableauData/patient_mmse.csv', encoding='utf-8')
         
         
     def Get_mna(self):
@@ -235,7 +235,7 @@ class demo_class:
                                                                      'Q12':1,'Q13':1,'Q14':1,'Q15':1,'Q16':1,'Q17':1,
                                                                      'Q18':1, 'patient':1, 'createdDate':1})))
         patient_mininutritions = self.patient_data.merge(mininutritions_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_mininutritions.to_csv('patient_mininutritions.csv', encoding='utf-8')
+        patient_mininutritions.to_csv('jb/TableauData/patient_mininutritions.csv', encoding='utf-8')
             
         
     def Get_phyasst(self):
@@ -248,7 +248,7 @@ class demo_class:
                                                                'musTypeLowerR':1,'createdDate':1,'patient':1,
                                                                'organization':1,'activity':1,'constraints':1,'intake':1})))
         phyassts_data = self.patient_data.merge(phyassts_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        phyassts_data.to_csv('patient_phyassts.csv', encoding='utf-8')
+        phyassts_data.to_csv('jb/TableauData/patient_phyassts.csv', encoding='utf-8')
             
         
     def Get_bedsore(self):
@@ -273,7 +273,7 @@ class demo_class:
         data_frames = [self.patient_data, bedsoredetails_data, bedsores_data]
         df_merged = reduce(lambda  left,right: pd.merge(left,right,on=['patient'], how='outer'), data_frames)
         
-        df_merged.to_csv('bedsore_detail.csv', encoding='utf-8')
+        df_merged.to_csv('jb/TableauData/bedsore_detail.csv', encoding='utf-8')
         
         
     def Get_marv2(self):
@@ -292,7 +292,7 @@ class demo_class:
                                                              'emgcyContAddress':1})))
         
         marv2s_data["name"] = marv2s_data["lastName"] + marv2s_data["firstName"]
-        marv2s_data.to_csv('marv2s_data.csv', encoding='utf-8')
+        marv2s_data.to_csv('jb/TableauData/marv2s_data.csv', encoding='utf-8')
         
         
     def Get_eq5d(self):
@@ -308,7 +308,7 @@ class demo_class:
                                                             'eqvas':1})))
         
         patient_eq5d = self.patient_data.merge(eq5ds_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_eq5d.to_csv('patient_eq5d.csv', encoding='utf-8')
+        patient_eq5d.to_csv('jb/TableauData/patient_eq5d.csv', encoding='utf-8')
         
         
     def Get_eat10(self):
@@ -324,7 +324,7 @@ class demo_class:
                                                                   'saliva':1})))
         
         patient_swallowing = self.patient_data.merge(swallowings_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_swallowing.to_csv('patient_swallowing.csv', encoding='utf-8')
+        patient_swallowing.to_csv('jb/TableauData/patient_swallowing.csv', encoding='utf-8')
             
         
     def Get_smartschedule(self):
@@ -352,7 +352,7 @@ class demo_class:
         # rename column
         smartschedules_data.columns = ['patient','completed','deleted','startTime','endTime','category','task',
                                                'organization','createdDate','subCategory']
-        smartschedules_data.to_csv('patient_smartschedule.csv', encoding='utf-8')
+        smartschedules_data.to_csv('jb/TableauData/patient_smartschedule.csv', encoding='utf-8')
         
         
     def Get_shifts(self):
@@ -368,7 +368,7 @@ class demo_class:
                                                             'notification':1})))
         
         patient_shifts = self.patient_data.merge(shifts_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_shifts.to_csv('patient_shifts.csv', encoding='utf-8')
+        patient_shifts.to_csv('jb/TableauData/patient_shifts.csv', encoding='utf-8')
         
         
     def Get_nursingrecord(self):
@@ -385,7 +385,7 @@ class demo_class:
                                                                               'changePlan':1})))
         
         patient_nursingrecords = self.patient_data.merge(nursingdiagnosisrecords_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_nursingrecords.to_csv('patient_nursingrecords.csv', encoding='utf-8')
+        patient_nursingrecords.to_csv('jb/TableauData/patient_nursingrecords.csv', encoding='utf-8')
         
         
     def Get_feedingtype(self):
@@ -405,5 +405,5 @@ class demo_class:
                                                                        'createdDate':1})))
         
         patient_nutritionrecord = self.patient_data.merge(nutritionrecords_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_nutritionrecord.to_csv('patient_nutritionrecord.csv', encoding='utf-8')
+        patient_nutritionrecord.to_csv('jb/TableauData/patient_nutritionrecord.csv', encoding='utf-8')
         
