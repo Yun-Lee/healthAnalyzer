@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from pymongo import MongoClient
 from functools import reduce
 from bson import ObjectId
@@ -8,24 +9,29 @@ class demo_class:
     
     def __init__(self):
         
-        self.uri = 'mongodb+srv://jubo-nis:tfyVTveUu2hISK01@jubo-mongo.iiltl.gcp.mongodb.net/release?authSource=admin&retryWrites=true&w=majority'
+        self.uri = 'privateURI'
         self.client = MongoClient(self.uri)
         self.db = self.client.release
         
         # get patient data
         self.collection = self.db.patients
-        self.patient_table = pd.DataFrame(list(self.collection.find()))
-        self.patient_data = self.patient_table[['_id', 'lastName', 'firstName', 'organization']]
-        self.patient_data.columns = ['a', 'b']
+        patient_data = pd.DataFrame(list(self.collection.find({}, {'lastName':1,
+                                                                 'firstName':1,
+                                                                 'organization':1})))
         self.patient_data["name"] = self.patient_data["lastName"] + self.patient_data["firstName"]
         self.patient_data.columns = ['patient', 'lastName', 'firstName', 'organization', 'name']
-        self.patient_data.to_csv('jb/TableauData/patient.csv', encoding='utf-8')
+        del self.patient_data['lastName']
+        del self.patient_data['firstName']
         
         # organization
         collection = self.db.organizations
         self.organizations_table = pd.DataFrame(list(collection.find({}, {'name': 1,'nickName': 1, 'solution':1})))
-        self.organizations_table['org_id'] = self.organizations_table['_id']
-        self.organizations_table.to_csv('jb/TableauData/organizations_table.csv', encoding='utf-8')
+        self.organizations_table.columns = ['org_id', 'name', 'nickName', 'solution']
+        
+        '''combine patient and organization'''
+        self.patient_org = self.patient_data.merge(self.organizations_table, left_on='organization', right_on = 'org_id', how='left', indicator=True)
+        self.patient_org.columns = ['patient', 'organization', 'name', 'org_id', 'org_name', 'nickName',
+                                    'solution', '_merge']
     
     
     def Get_vitalsign(self):
@@ -39,49 +45,63 @@ class demo_class:
                                                                  'SYS':1,
                                                                  'DIA':1,
                                                                  'patient':1,
-                                                                 'organization':1,
                                                                  'RR':1,
                                                                  'SPO2':1})))
-        patient_vitalsign = self.patient_data.merge(vitalsigns_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_vitalsign.to_csv('jb/TableauData/patient_vitalsign.csv', encoding='utf-8')
+        
+        '''combine'''
+        data_frames = [vitalsigns_data, self.patient_org]
+        patient_org_vitalsigns = reduce(lambda left, right: pd.merge(left, right,
+                                        on=['patient'], how='outer'), data_frames)
+
     
-    
-    def Get_bloodsugar(self):
+    def Get_bloodsugar_insulin(self):
         
         '''bloodsugar'''
         
         collection = self.db.bloodsugars
         bloodsugar_data = pd.DataFrame(list(collection.find({}, {'insulin': 1,'createdDate': 1,
                                                                   'patient': 1, 'sugarValue':1,
-                                                                  'sugarType':1, 'organization':1})))
+                                                                  'sugarType':1})))
         # convert ObjectID
-        for i in range(len(bloodsugar_data)):
-            bloodsugar_data['insulin'][i] = str(bloodsugar_data['insulin'][i])
-            bloodsugar_data['insulin'][i] = bloodsugar_data['insulin'][i].replace("ObjectId('",'').replace("')",'').replace('[','').replace(']','').split(', ')
         
-        # bloodsugar_data_2 = bloodsugar_data.explode('insulin')
-        patient_bloodsugar = self.patient_data.merge(bloodsugar_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_bloodsugar.to_csv('jb/TableauData/patient_bloodsugar.csv', encoding='utf-8')
-        
-        
-    def Get_insulin(self):
+        bloodsugar_data = bloodsugar_data.explode('insulin')
+        bloodsugar_data.replace(np.nan,'-', inplace=True)
+        bloodsugar_data.columns = ['bloodsugar_id','sugarType','sugarValue','patient',
+                                     'createdDate','insulin']
         
         '''insulins'''
         
         collection = self.db.insulins
         insulins_data = pd.DataFrame(list(collection.find({}, {'_id':1,
                                                                'createdDate':1,
-                                                               'patient':1,
                                                                'part':1,
                                                                'medicine':1,
                                                                'dose':1,
                                                                'bloodsugar':1,
                                                                'state':1})))
-        patient_insulin = self.patient_data.merge(insulins_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_insulin.to_csv('jb/TableauData/patient_insulin.csv', encoding='utf-8')
+        del insulins_data['_id']
+        insulins_data.columns = ['medicine', 'dose','part','createdDate',
+                                 'state','bloodsugar_id']
+        insulins_data.replace(np.nan,'-', inplace=True)
         
         
-    def Get_weight(self):
+        '''combine'''
+
+        datafrmae = [bloodsugar_data, insulins_data]
+        bloodsugar_insulin_source = reduce(lambda left,right: pd.merge(left,
+                                        right,on=['bloodsugar_id'], how='outer'), datafrmae)
+        
+        bloodsugar_insulin_source.columns = ['bloodsugar_id','sugarType','sugarValue',
+                                             'patient','createdDate_bs','insulin_id',
+                                             'medicine','dose','part','createdDate_insulin',
+                                             'state']
+        
+        datafrmae = [bloodsugar_insulin_source, self.patient_org]
+        bloodsugar_insulin_source = reduce(lambda left,right: pd.merge(left,
+                                        right,on=['patient'], how='outer'), datafrmae)
+    
+        
+    def Get_weight(self, bedsores_data):
         
         '''weight'''
         
@@ -98,11 +118,52 @@ class demo_class:
                                                               'month6':1,
                                                               'monthWeight6':1})))
         
-        patient_weight = self.patient_data.merge(weights_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_weight.to_csv('jb/TableauData/patient_weight.csv', encoding='utf-8')
+        '''combine'''
+
+        weight_source = [weights_data, self.patient_org]
+        weight_datasource = reduce(lambda  left,right: pd.merge(left,
+                                right,on=['patient'], how='outer'), weight_source)
+
+
+    def nutritionrecords(self):
+    
+        '''進食方式'''
+    
+        collection = self.db.nutritionrecords        
+        nutritionrecords_data = pd.DataFrame(list(collection.find({}, {'patient':1,
+                                                                       'feedingMethod':1,
+                                                                       'mobility':1,
+                                                                       'feedingAbility':1,
+                                                                       'foodType':1,
+                                                                       'foodIntake':1,
+                                                                       'advice':1,
+                                                                       'nutrientIntake':1,
+                                                                       'createdDate':1})))
+        '''combine'''
+
+        datafrmae = [nutritionrecords_data, self.patient_org]
+        nutrition_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                              how='outer'), datafrmae)
+    
+
+    def Get_mna(self):
         
+        ''''mna'''
         
-    def Get_cognitive(self):
+        collection = self.db.mininutritions
+        mininutritions_data = pd.DataFrame(list(collection.find({}, {'Q1':1, 'Q2':1, 'Q3':1, 'Q4':1, 'Q5':1,
+                                                                     'Q6':1,'Q7':1,'Q8':1,'Q9':1,'Q10':1,'Q11':1,
+                                                                     'Q12':1,'Q13':1,'Q14':1,'Q15':1,'Q16':1,'Q17':1,
+                                                                     'Q18':1, 'patient':1, 'createdDate':1})))
+        
+        '''combine'''
+        
+        datafrmae = [mininutritions_data, self.patient_org]
+        mininutritions_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                                   how='outer'), datafrmae)
+
+        
+    def assessment(self):
         
         '''cognitives'''
         
@@ -111,88 +172,98 @@ class demo_class:
                                                                  'createdDate':1,
                                                                  'score':1,
                                                                  'unassessable':1})))
-        patient_cognitive = self.patient_data.merge(cognitives_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_cognitive.to_csv('jb/TableauData/patient_cognitive.csv', encoding='utf-8')
+        cognitives_data.columns = ['patient_cogniitives','createdDate_cognitives',
+                                   'score_cognitives','unassessable_cognitives']
         
-        
-    def Get_depression(self):
         
         '''depressions'''
         
         collection = self.db.depressions
         depressions_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                                 'createdDate':1,
-                                                                 'score':1,
-                                                                 'unassessable':1})))
-        patient_depression = self.patient_data.merge(depressions_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_depression.to_csv('jb/TableauData/patient_depression.csv', encoding='utf-8')
-            
-        
-    def Get_fall(self):
+                                                                  'createdDate':1,
+                                                                  'score':1,
+                                                                  'unassessable':1})))
+        depressions_data.columns = ['patient_depression','createdDate_depression',
+                                    'score_depression','unassessable_depression']
+
         
         '''falls'''
     
         collection = self.db.falls        
         falls_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                            'unassessable':1,
                                                             'createdDate':1,
                                                             'score':1,
-                                                            'type':1})))
-        patient_fall = self.patient_data.merge(falls_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_fall.to_csv('jb/TableauData/patient_fall.csv', encoding='utf-8')  
+                                                            'unassessable':1})))
+        falls_data.columns = ['patient_fall', 'createdDate_fall','score_fall',
+                              'unassessable_fall']
         
-        
-    def Get_barthel(self):
         
         '''barthels'''
         
         collection = self.db.barthels    
         barthels_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                               'unassessable':1,
                                                                'createdDate':1,
-                                                               'score':1})))
-        patient_barthel = self.patient_data.merge(barthels_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_barthel.to_csv('jb/TableauData/patient_barthel.csv', encoding='utf-8')
+                                                               'score':1,
+                                                               'unassessable':1})))
+        barthels_data.columns = ['patient_barthel', 'createdDate_barthel','score_barthel',
+                                 'unassessable_barthel']
         
-        
-    def Get_iadl(self):
         
         '''iadlassessments'''
         
         collection = self.db.iadlassessments
         iadlassessments_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                                      'unassessable':1,
                                                                       'createdDate':1,
-                                                                      'score':1})))
-        patient_iadl = self.patient_data.merge(iadlassessments_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_iadl.to_csv('jb/TableauData/patient_iadl.csv', encoding='utf-8')
-            
+                                                                      'score':1,
+                                                                      'unassessable':1})))
+        iadlassessments_data.columns = ['patient_iadl','createdDate_iadl','score_iadl',
+                                        'unassessable_iadl']
         
-    def Get_badl(self):
         
         '''badls'''
         
         collection = self.db.badls
         badls_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                            'unassessable':1,
                                                             'createdDate':1,
-                                                            'score':1})))
-        patient_badl = self.patient_data.merge(badls_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_badl.to_csv('jb/TableauData/patient_badl.csv', encoding='utf-8')
+                                                            'score':1,
+                                                            'unassessable':1})))
+        badls_data.columns = ['patient_badl','createdDate_badl','score_badl',
+                              'unassessable_badl']
         
-        
-    def Get_pressure(self):
     
-        # pressures
+        '''pressures'''
     
         collection = self.db.pressures
         pressures_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                                'unassessable':1,
                                                                 'createdDate':1,
                                                                 'score':1,
-                                                                'assessmentType':1})))
-        patient_pressure = self.patient_data.merge(pressures_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_pressure.to_csv('jb/TableauData/patient_pressure.csv', encoding='utf-8')
+                                                                'unassessable':1})))
+        pressures_data.columns = ['patient_pressure','createdDate_pressure',
+                                  'score_pressure','unassessable_pressure']
+        
+        
+        '''eq5d'''
+        
+        collection = self.db.eq5ds
+        eq5ds_data = pd.DataFrame(list(collection.find({}, {'patient':1,
+                                                            'createdDate':1,
+                                                            'score':1,
+                                                            'unassessable':1,
+                                                            'eqvas':1})))
+        
+        eq5ds_data.columns = ['patient_eq5d','createdDate_eq5d',
+                              'score_eq5d','unassessable_eq5d','eqvas_eq5d']
+    
+        '''eat-10'''
+    
+        collection = self.db.swallowings
+        swallowings_data = pd.DataFrame(list(collection.find({}, {'patient':1,
+                                                                  'unassessable':1,
+                                                                  'createdDate':1,
+                                                                  'formMode':1,
+                                                                  'saliva':1})))
+        swallowings_data.columns = ['patient_eat10','createdDate_eat10','saliva_eat10',
+                                    'unassessable_eat10']
         
         
     def Get_mmse(self):
@@ -217,25 +288,21 @@ class demo_class:
                                                             'languageQ7':1,'languageQ8':1,'constructiveQ1':1
                                                             })))        
         
-        for col in mmses_data:
-            mmses_data[col] = mmses_data[col].replace(['notCorrect'], 0)
-            mmses_data[col] = mmses_data[col].replace(['correct'], 1)
-            
-        patient_mmse = self.patient_data.merge(mmses_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_mmse.to_csv('jb/TableauData/patient_mmse.csv', encoding='utf-8')
+        mmses_data.replace({'notCorrect': 0, 'correct': 1}, inplace=True)
+        mmses_data.replace({'College': '大學',
+                            'Elementary': '小學',
+                            'Graduate': '研究所以上',
+                            'Illiterate': '不識字',
+                            'JuniorHigh': '國中',
+                            'SeniorHigh': '高中職'}, inplace=True)
+        mmses_data.replace(np.nan,'-', inplace=True)
+
+        '''combine'''
         
-        
-    def Get_mna(self):
-        
-        ''''mna'''
-        
-        collection = self.db.mininutritions
-        mininutritions_data = pd.DataFrame(list(collection.find({}, {'Q1':1, 'Q2':1, 'Q3':1, 'Q4':1, 'Q5':1,
-                                                                     'Q6':1,'Q7':1,'Q8':1,'Q9':1,'Q10':1,'Q11':1,
-                                                                     'Q12':1,'Q13':1,'Q14':1,'Q15':1,'Q16':1,'Q17':1,
-                                                                     'Q18':1, 'patient':1, 'createdDate':1})))
-        patient_mininutritions = self.patient_data.merge(mininutritions_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_mininutritions.to_csv('jb/TableauData/patient_mininutritions.csv', encoding='utf-8')
+        datafrmae = [mmses_data, self.patient_org]
+        mmses_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                          how='outer'), datafrmae)
+
             
         
     def Get_phyasst(self):
@@ -243,37 +310,62 @@ class demo_class:
         '''phyassts'''
         
         collection = self.db.phyassts
-        phyassts_data = pd.DataFrame(list(collection.find({}, {'musUpperR':1, 'musUpperL':1, 'musLowerR':1, 'musLowerL':1, 'conscious':1,
-                                                               'musTypeUpperR':1,'musTypeUpperL':1,'musTypeLowerL':1,
-                                                               'musTypeLowerR':1,'createdDate':1,'patient':1,
-                                                               'organization':1,'activity':1,'constraints':1,'intake':1})))
-        phyassts_data = self.patient_data.merge(phyassts_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        phyassts_data.to_csv('jb/TableauData/patient_phyassts.csv', encoding='utf-8')
-            
+        phyassts_data = pd.DataFrame(list(collection.find({}, {'musUpperR':1, 'musUpperL':1,
+                                                               'musLowerR':1,
+                                                               'musLowerL':1, 'conscious':1,
+                                                               'musTypeUpperR':1,
+                                                               'musTypeUpperL':1,
+                                                               'musTypeLowerL':1,
+                                                               'musTypeLowerR':1,
+                                                               'createdDate':1,'patient':1,
+                                                               'activity':1,'constraints':1,
+                                                               'intake':1})))
+        
+        # 資料整理
+        
+        phyassts_data.replace(np.nan,'-', inplace=True)
+        phyassts_data.replace({'normal': '正常',
+                               'sightlyShrinked': '微萎縮',
+                               'loose': '鬆弛',
+                               'shrinked': '萎縮'}, inplace=True)
+        phyassts_data['conscious'] = [','.join(map(str, l)) for l in phyassts_data['conscious']]
+        phyassts_data['activity'] = [','.join(map(str, l)) for l in phyassts_data['activity']]
+        phyassts_data['constraints'] = [','.join(map(str, l)) for l in phyassts_data['constraints']]
+        phyassts_data['intake'] = [','.join(map(str, l)) for l in phyassts_data['intake']]
+        
+        '''combine'''
+        
+        datafrmae = [phyassts_data, self.patient_org]
+        phyasst_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                            how='outer'), datafrmae)
+          
         
     def Get_bedsore(self):
         
         ''''bedsores'''
         
         collection = self.db.bedsores
-        bedsores_data = pd.DataFrame(list(collection.find({}, {'latestGrade':1, 'finishedNote':1, 'finished':1, 'grade':1,
-                                                               'locationOccurMemo':1,'locationOccur':1,'woundType':1,
-                                                               'site':1,'createdDate':1,'patient':1, 'organization':1})))
+        bedsores_data = pd.DataFrame(list(collection.find({}, {'latestGrade':1, 'finishedNote':1,
+                                                               'finished':1, 'grade':1,
+                                                               'locationOccurMemo':1,
+                                                               'locationOccur':1,'woundType':1,
+                                                               'site':1,'createdDate':1,
+                                                               'patient':1})))
+        del bedsores_data['_id']
         
         '''bedsore detail'''
         
         collection = self.db.bedsoredetails
-        bedsoredetails_table = pd.DataFrame(list(collection.find()))
-        bedsoredetails_data = bedsoredetails_table[['patient','skinStatus','createdDate']]
+        bedsoredetails_data = pd.DataFrame(list(collection.find({}, {'patient':1,
+                                                                     'skinStatus':1,
+                                                                     'createdDate':1})))
+        del bedsoredetails_data['_id']
             
         '''combine'''
-        bedsores_data = self.patient_data.merge(bedsores_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
         
-        # compile the list of dataframes you want to merge
-        data_frames = [self.patient_data, bedsoredetails_data, bedsores_data]
-        df_merged = reduce(lambda  left,right: pd.merge(left,right,on=['patient'], how='outer'), data_frames)
-        
-        df_merged.to_csv('jb/TableauData/bedsore_detail.csv', encoding='utf-8')
+        data_frames = [bedsores_data, bedsoredetails_data, self.patient_org]
+        df_merged = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                       how='outer'), data_frames)
         
         
     def Get_marv2(self):
@@ -281,10 +373,15 @@ class demo_class:
         '''marv2'''
     
         collection = self.db.patients
-        marv2s_data = pd.DataFrame(list(collection.find({}, {'_id':1, 'organization':1, 'lastName':1, 'firstName':1, 'sex':1,
-                                                             'birthday':1, 'checkInDate':1, 'room':1, 'branch':1, 'bed':1,
-                                                             'medications':1, 'drugAllergies':1, 'foodAllergies':1, 'medicalHistory':1,
-                                                             'tube':1, 'DNRConsent':1, 'familyHealthProblems':1,
+        marv2s_data = pd.DataFrame(list(collection.find({}, {'_id':1, 'lastName':1,
+                                                             'firstName':1, 'sex':1,
+                                                             'birthday':1, 'checkInDate':1,
+                                                             'room':1, 'branch':1, 'bed':1,
+                                                             'medications':1, 'drugAllergies':1,
+                                                             'foodAllergies':1,
+                                                             'medicalHistory':1,
+                                                             'tube':1, 'DNRConsent':1,
+                                                             'familyHealthProblems':1,
                                                              'doctorDivision':1,'status':1,
                                                              'hospital':1,'emgcyContPhone':1,
                                                              'emgcyCont':1,'idNumber':1,'phone':1,
@@ -292,40 +389,17 @@ class demo_class:
                                                              'emgcyContAddress':1})))
         
         marv2s_data["name"] = marv2s_data["lastName"] + marv2s_data["firstName"]
-        marv2s_data.to_csv('jb/TableauData/marv2s_data.csv', encoding='utf-8')
+        del marv2s_data['lastName']
+        del marv2s_data['firstName']
+        marv2s_data.rename(columns={'_id':'patient'}, inplace=True)
+        marv2s_data.replace(np.nan,'-', inplace=True)
         
+        '''combine'''
         
-    def Get_eq5d(self):
-        
-        '''eq5d'''
-        
-        collection = self.db.eq5ds
-        eq5ds_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                            'unassessable':1,
-                                                            'createdDate':1,
-                                                            'score':1,
-                                                            'organization':1,
-                                                            'eqvas':1})))
-        
-        patient_eq5d = self.patient_data.merge(eq5ds_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_eq5d.to_csv('jb/TableauData/patient_eq5d.csv', encoding='utf-8')
-        
-        
-    def Get_eat10(self):
-    
-        '''eat-10'''
-    
-        collection = self.db.swallowings
-        swallowings_data = pd.DataFrame(list(collection.find({}, {'patient':1,
-                                                                  'unassessable':1,
-                                                                  'createdDate':1,
-                                                                  'organization':1,
-                                                                  'formMode':1,
-                                                                  'saliva':1})))
-        
-        patient_swallowing = self.patient_data.merge(swallowings_data, left_on='_id', right_on = 'patient', how='left', indicator=True)
-        patient_swallowing.to_csv('jb/TableauData/patient_swallowing.csv', encoding='utf-8')
-            
+        data_frames = [marv2s_data, self.patient_org]
+        marv2s_source = reduce(lambda  left,right: pd.merge(left,right,on=['patient'],
+                                                            how='outer'), data_frames)
+          
         
     def Get_smartschedule(self):
         
@@ -339,21 +413,25 @@ class demo_class:
                                                                      'endTime':1,
                                                                      'category':1,
                                                                      'task':1,
-                                                                     'organization':1,
                                                                      'createdDate':1,
                                                                      'subCategory':1})))
+        smartschedules_data = smartschedules_data.explode('patientSelected')
             
-        # convert ObjectId
-        for i in range(len(smartschedules_data)):
-            smartschedules_data['patientSelected'][i] = str(smartschedules_data['patientSelected'][i])
-            smartschedules_data['patientSelected'][i] = smartschedules_data['patientSelected'][i].replace("ObjectId('",'').replace("')",'')
-            smartschedules_data['patientSelected'][i] = smartschedules_data['patientSelected'][i].replace("['",'').replace("']",'')
-        
         # rename column
-        smartschedules_data.columns = ['patient','completed','deleted','startTime','endTime','category','task',
-                                               'organization','createdDate','subCategory']
-        smartschedules_data.to_csv('jb/TableauData/patient_smartschedule.csv', encoding='utf-8')
+        smartschedules_data.columns = ['_id','patient','completed','deleted','task',
+                                       'startTime','endTime','category',
+                                       'createdDate','subCategory']
         
+        # delect patient值為空者
+        smartschedules_data.replace(np.nan,'-', inplace=True)
+        smartschedules_data = smartschedules_data.loc[smartschedules_data['patient'] != '-']
+        
+        '''combine'''
+        
+        data_frames = [smartschedules_data, self.patient_org]
+        smartschedule_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                                  how='outer'), data_frames)
+
         
     def Get_shifts(self):
         
@@ -363,12 +441,22 @@ class demo_class:
         shifts_data = pd.DataFrame(list(collection.find({}, {'patient':1,
                                                             'notes':1,
                                                             'createdDate':1,
-                                                            'organization':1,
                                                             'shiftname':1,
                                                             'notification':1})))
+        # 資料處理
         
-        patient_shifts = self.patient_data.merge(shifts_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_shifts.to_csv('jb/TableauData/patient_shifts.csv', encoding='utf-8')
+        shifts_data.replace(np.nan,'-', inplace=True)
+        shifts_data.replace({'dayShift': '日班',
+                            'eveningShift': '午班',
+                            'nightShift': '晚班'}, inplace=True)
+        del shifts_data['_id']
+        
+        '''combine'''
+        
+        data_frames = [shifts_data, self.patient_org]
+        shift_source = reduce(lambda  left,right: pd.merge(left,right,on=['patient'],
+                                                           how='outer'), data_frames)
+
         
         
     def Get_nursingrecord(self):
@@ -381,29 +469,11 @@ class demo_class:
                                                                               'createdDate':1,
                                                                               'goals':1,
                                                                               'nursingDiagnosis':1,
-                                                                              'organization':1,
                                                                               'changePlan':1})))
+        # 資料處理
+        nursingdiagnosisrecords_data.replace(np.nan,'-', inplace = True)
         
-        patient_nursingrecords = self.patient_data.merge(nursingdiagnosisrecords_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_nursingrecords.to_csv('jb/TableauData/patient_nursingrecords.csv', encoding='utf-8')
+        '''combine'''
         
-        
-    def Get_feedingtype(self):
-        
-        '''進食方式'''
-    
-        collection = self.db.nutritionrecords        
-        nutritionrecords_data = pd.DataFrame(list(collection.find({}, {'organization':1,
-                                                                       'patient':1,
-                                                                       'feedingMethod':1,
-                                                                       'mobility':1,
-                                                                       'feedingAbility':1,
-                                                                       'foodType':1,
-                                                                       'foodIntake':1,
-                                                                       'advice':1,
-                                                                       'nutrientIntake':1,
-                                                                       'createdDate':1})))
-        
-        patient_nutritionrecord = self.patient_data.merge(nutritionrecords_data, left_on='patient', right_on = 'patient', how='left', indicator=True)
-        patient_nutritionrecord.to_csv('jb/TableauData/patient_nutritionrecord.csv', encoding='utf-8')
-        
+        data_frames = [nursingdiagnosisrecords_data, self.patient_org]
+        nursingdiagnosisrecords_source = reduce(lambda  left,right: pd.merge(left,right,on=['patient'], how='outer'), data_frames)
