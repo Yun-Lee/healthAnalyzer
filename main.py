@@ -5,36 +5,41 @@ from functools import reduce
 from bson import ObjectId
 
 
-class demo_class:
+class MyClass:
     
     def __init__(self):
         
-        self.uri = 'privateURI'
+        self.uri = 'mongodb+srv://jubo-nis:tfyVTveUu2hISK01@jubo-mongo.iiltl.gcp.mongodb.net/release?authSource=admin&retryWrites=true&w=majority'
         self.client = MongoClient(self.uri)
         self.db = self.client.release
         
         # get patient data
         self.collection = self.db.patients
-        patient_data = pd.DataFrame(list(self.collection.find({}, {'lastName':1,
+        self.patient_data = pd.DataFrame(list(self.collection.find({}, {'lastName':1,
                                                                  'firstName':1,
                                                                  'organization':1})))
         self.patient_data["name"] = self.patient_data["lastName"] + self.patient_data["firstName"]
-        self.patient_data.columns = ['patient', 'lastName', 'firstName', 'organization', 'name']
+        self.patient_data.columns = ['patient', 'lastName', 'firstName',
+                                     'organization', 'name']
         del self.patient_data['lastName']
         del self.patient_data['firstName']
         
         # organization
         collection = self.db.organizations
-        self.organizations_table = pd.DataFrame(list(collection.find({}, {'name': 1,'nickName': 1, 'solution':1})))
+        self.organizations_table = pd.DataFrame(list(collection.find({},
+                                            {'name': 1,'nickName': 1, 'solution':1})))
         self.organizations_table.columns = ['org_id', 'name', 'nickName', 'solution']
         
         '''combine patient and organization'''
-        self.patient_org = self.patient_data.merge(self.organizations_table, left_on='organization', right_on = 'org_id', how='left', indicator=True)
-        self.patient_org.columns = ['patient', 'organization', 'name', 'org_id', 'org_name', 'nickName',
+        self.patient_org = self.patient_data.merge(self.organizations_table,
+                left_on='organization', right_on = 'org_id', how='left', indicator=True)
+        self.patient_org.columns = ['patient', 'organization', 'name', 'org_id', 
+                                    'org_name', 'nickName',
                                     'solution', '_merge']
+        del self.patient_org['org_id']
     
     
-    def Get_vitalsign(self):
+    def get_vitalsign(self):
         
         '''vitalsigns'''
         
@@ -51,10 +56,12 @@ class demo_class:
         '''combine'''
         data_frames = [vitalsigns_data, self.patient_org]
         patient_org_vitalsigns = reduce(lambda left, right: pd.merge(left, right,
-                                        on=['patient'], how='outer'), data_frames)
+                                        on=['patient'], how='left'), data_frames)
+        del patient_org_vitalsigns['_merge']
+        return patient_org_vitalsigns
 
     
-    def Get_bloodsugar_insulin(self):
+    def get_bloodsugar_insulin(self):
         
         '''bloodsugar'''
         
@@ -72,14 +79,14 @@ class demo_class:
         '''insulins'''
         
         collection = self.db.insulins
-        insulins_data = pd.DataFrame(list(collection.find({}, {'_id':1,
+        insulins_data = pd.DataFrame(list(collection.find({}, {'_id':0,
                                                                'createdDate':1,
                                                                'part':1,
                                                                'medicine':1,
                                                                'dose':1,
                                                                'bloodsugar':1,
                                                                'state':1})))
-        del insulins_data['_id']
+
         insulins_data.columns = ['medicine', 'dose','part','createdDate',
                                  'state','bloodsugar_id']
         insulins_data.replace(np.nan,'-', inplace=True)
@@ -98,10 +105,12 @@ class demo_class:
         
         datafrmae = [bloodsugar_insulin_source, self.patient_org]
         bloodsugar_insulin_source = reduce(lambda left,right: pd.merge(left,
-                                        right,on=['patient'], how='outer'), datafrmae)
+                                        right,on=['patient'], how='left'), datafrmae)
+        del bloodsugar_insulin_source['_merge']
+        return bloodsugar_insulin_source
     
         
-    def Get_weight(self, bedsores_data):
+    def get_weight(self, bedsores_data):
         
         '''weight'''
         
@@ -122,10 +131,12 @@ class demo_class:
 
         weight_source = [weights_data, self.patient_org]
         weight_datasource = reduce(lambda  left,right: pd.merge(left,
-                                right,on=['patient'], how='outer'), weight_source)
+                                right,on=['patient'], how='left'), weight_source)
+        del weight_datasource['_merge']
+        return weight_datasource
 
 
-    def nutritionrecords(self):
+    def get_nutritionrecords(self):
     
         '''進食方式'''
     
@@ -143,10 +154,13 @@ class demo_class:
 
         datafrmae = [nutritionrecords_data, self.patient_org]
         nutrition_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
-                                                              how='outer'), datafrmae)
+                                                              how='left'), datafrmae)
+        nutrition_source.replace(np.nan,'-', inplace=True)
+        del nutrition_source['_merge']
+        return nutrition_source
     
 
-    def Get_mna(self):
+    def get_mna(self):
         
         ''''mna'''
         
@@ -160,7 +174,9 @@ class demo_class:
         
         datafrmae = [mininutritions_data, self.patient_org]
         mininutritions_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
-                                                                   how='outer'), datafrmae)
+                                                                   how='left'), datafrmae)
+        del mininutritions_source['_merge']
+        return mininutritions_source
 
         
     def assessment(self):
@@ -266,14 +282,14 @@ class demo_class:
                                     'unassessable_eat10']
         
         
-    def Get_mmse(self):
+    def get_mmse(self):
         
         '''mmses'''
     
         collection = self.db.mmses   
         mmses_data = pd.DataFrame(list(collection.find({}, {'patient':1,'unassessable':1,
-                                                            'createdDate':1,'organization':1,
-                                                            'education':1,'orientationQ1':1,'orientationQ2':1,
+                                                            'createdDate':1,'education':1,
+                                                            'orientationQ1':1,'orientationQ2':1,
                                                             'orientationQ3':1,'orientationQ4':1,
                                                             'orientationQ5':1,'orientationQ6':1,
                                                             'orientationQ7':1,'orientationQ8':1,
@@ -301,11 +317,13 @@ class demo_class:
         
         datafrmae = [mmses_data, self.patient_org]
         mmses_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
-                                                          how='outer'), datafrmae)
+                                                          how='left'), datafrmae)
+        del mmses_source['_merge']
+        return mmses_source
 
             
         
-    def Get_phyasst(self):
+    def get_phyasst(self):
         
         '''phyassts'''
         
@@ -337,44 +355,73 @@ class demo_class:
         
         datafrmae = [phyassts_data, self.patient_org]
         phyasst_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
-                                                            how='outer'), datafrmae)
+                                                            how='left'), datafrmae)
+        del phyasst_source['_merge']
+        return phyasst_source
           
         
-    def Get_bedsore(self):
+    def get_bedsore(self):
         
         ''''bedsores'''
         
         collection = self.db.bedsores
-        bedsores_data = pd.DataFrame(list(collection.find({}, {'latestGrade':1, 'finishedNote':1,
+        bedsores_data = pd.DataFrame(list(collection.find({}, {'_id':0,'latestGrade':1, 'finishedNote':1,
                                                                'finished':1, 'grade':1,
                                                                'locationOccurMemo':1,
                                                                'locationOccur':1,'woundType':1,
                                                                'site':1,'createdDate':1,
                                                                'patient':1})))
-        del bedsores_data['_id']
+
+        bedsores_data.replace(np.nan,'-', inplace=True)
+        bedsores_data.replace({'outside': '外側',
+                            'inside': '內側',
+                            'bedsore': '壓力性損傷',
+                            'generalWound':'一般傷口'}, inplace=True)
         
         '''bedsore detail'''
         
         collection = self.db.bedsoredetails
-        bedsoredetails_data = pd.DataFrame(list(collection.find({}, {'patient':1,
+        bedsoredetails_data = pd.DataFrame(list(collection.find({}, {'_id':0, 'patient':1,
                                                                      'skinStatus':1,
                                                                      'createdDate':1})))
-        del bedsoredetails_data['_id']
-            
+
+        bedsoredetails_data['skinStatus'] = [','.join(map(str, l)) for l in bedsoredetails_data['skinStatus']]
+        bedsoredetails_data.replace({'': '-',
+                                     'normal':'完整',
+                                     'redness':'泛紅',
+                                     'swelling':'水腫',
+                                     'nodule':'硬核',
+                                     'normal,redness': '完整,泛紅',
+                                     'redness,normal': '泛紅,完整',
+                                     'swelling,normal':'水腫,完整',
+                                     'normal,swelling':'完整,水腫',
+                                     'None':'無',
+                                     'nodule,normal':'硬核,完整',
+                                     'normal,nodule':'完整,硬核',
+                                     'redness,nodule':'泛紅,硬核',
+                                     'normal,redness,nodule':'完整,泛紅,硬核',
+                                     'redness,swelling':'泛紅,水腫',
+                                     'swelling,redness':'水腫,泛紅'}, inplace=True)
+
         '''combine'''
         
         data_frames = [bedsores_data, bedsoredetails_data, self.patient_org]
-        df_merged = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+        bedsore_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
                                                        how='outer'), data_frames)
+        del bedsore_source['_merge']
+        bedsore_source.rename(columns={'createdDate_x':'createdDate_bedsore',
+                                       'createdDate_y':'createdDate_detail'}, inplace=True)
+        
+        return bedsore_source
         
         
-    def Get_marv2(self):
+        
+    def get_marv2(self):
     
         '''marv2'''
     
         collection = self.db.patients
-        marv2s_data = pd.DataFrame(list(collection.find({}, {'_id':1, 'lastName':1,
-                                                             'firstName':1, 'sex':1,
+        marv2s_data = pd.DataFrame(list(collection.find({}, {'_id':1,'sex':1,
                                                              'birthday':1, 'checkInDate':1,
                                                              'room':1, 'branch':1, 'bed':1,
                                                              'medications':1, 'drugAllergies':1,
@@ -388,20 +435,38 @@ class demo_class:
                                                              'emgcyContRelation':1,
                                                              'emgcyContAddress':1})))
         
-        marv2s_data["name"] = marv2s_data["lastName"] + marv2s_data["firstName"]
-        del marv2s_data['lastName']
-        del marv2s_data['firstName']
         marv2s_data.rename(columns={'_id':'patient'}, inplace=True)
+        marv2s_data.replace({'female': '女性',
+                             'male':'男性',
+                             'child':'子女',
+                             'spouse':'配偶',
+                             'others':'其他',
+                             'parent':'父母',
+                             'sibling':'手足',
+                             'socialWorker':'社工',
+                             'grandchild':'孫子女',
+                             'friend':'朋友',
+                             '':'-'}, inplace=True)
         marv2s_data.replace(np.nan,'-', inplace=True)
+        marv2s_data['familyHealthProblems'] = [','.join(map(str, l)) for l in marv2s_data['familyHealthProblems']]
+        marv2s_data['medications'] = [','.join(map(str, l)) for l in marv2s_data['medications']]
+        marv2s_data['medicalHistory'] = [','.join(map(str, l)) for l in marv2s_data['medicalHistory']]
+        marv2s_data['tube'] = [','.join(map(str, l)) for l in marv2s_data['tube']]
+        marv2s_data['drugAllergies'] = [','.join(map(str, l)) for l in marv2s_data['drugAllergies']]
+        marv2s_data['foodAllergies'] = [','.join(map(str, l)) for l in marv2s_data['foodAllergies']]
+        marv2s_data = marv2s_data.loc[marv2s_data['status'] == 'present']
         
         '''combine'''
         
         data_frames = [marv2s_data, self.patient_org]
-        marv2s_source = reduce(lambda  left,right: pd.merge(left,right,on=['patient'],
-                                                            how='outer'), data_frames)
+        marv2s_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
+                                                       how='left'), data_frames)
+        
+        del marv2s_source['_merge']
+        return marv2s_source
           
         
-    def Get_smartschedule(self):
+    def get_smartschedule(self):
         
         '''smartschedules'''
         
@@ -430,15 +495,17 @@ class demo_class:
         
         data_frames = [smartschedules_data, self.patient_org]
         smartschedule_source = reduce(lambda left,right: pd.merge(left,right,on=['patient'],
-                                                                  how='outer'), data_frames)
+                                                                  how='left'), data_frames)
+        del smartschedule_source['_merge']
+        return smartschedule_source
 
         
-    def Get_shifts(self):
+    def get_shifts(self):
         
         '''交班'''
     
         collection = self.db.shifts        
-        shifts_data = pd.DataFrame(list(collection.find({}, {'patient':1,
+        shifts_data = pd.DataFrame(list(collection.find({}, {'_id':0,'patient':1,
                                                             'notes':1,
                                                             'createdDate':1,
                                                             'shiftname':1,
@@ -449,17 +516,18 @@ class demo_class:
         shifts_data.replace({'dayShift': '日班',
                             'eveningShift': '午班',
                             'nightShift': '晚班'}, inplace=True)
-        del shifts_data['_id']
         
         '''combine'''
         
         data_frames = [shifts_data, self.patient_org]
         shift_source = reduce(lambda  left,right: pd.merge(left,right,on=['patient'],
-                                                           how='outer'), data_frames)
+                                                           how='left'), data_frames)
+        del shift_source['_merge']
+        return shift_source
 
         
         
-    def Get_nursingrecord(self):
+    def get_nursingrecord(self):
     
         '''護理紀錄'''
     
@@ -476,4 +544,15 @@ class demo_class:
         '''combine'''
         
         data_frames = [nursingdiagnosisrecords_data, self.patient_org]
-        nursingdiagnosisrecords_source = reduce(lambda  left,right: pd.merge(left,right,on=['patient'], how='outer'), data_frames)
+        nursingdiagnosisrecords_source = reduce(lambda left,right: pd.merge(left,
+                                            right,on=['patient'], how='left'), data_frames)
+        del nursingdiagnosisrecords_source['_merge']
+        return nursingdiagnosisrecords_source
+
+
+
+# '_id':0
+# return
+# two df merge
+# init class: a = demo_class()
+# b = a.Get_mna()
